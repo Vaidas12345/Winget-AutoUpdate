@@ -1,11 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <policyDefinitionResources xmlns:xsd="http://www.w3.org/2001/XMLSchema"
-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" revision="5.3" schemaVersion="1.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" revision="5.4" schemaVersion="1.0"
   xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
   <displayName>WinGet-AutoUpdate</displayName>
   <description>WinGet-AutoUpdate GPO Management</description>
   <resources>
     <stringTable>
+      <string id="MinimumUpdateAgeDays_Name">Minimum application update age (days)</string>
+      <string id="MinimumUpdateAgeDays_Explain">Set how many days WAU waits before an application version becomes eligible. A Monday release with a three-day delay is eligible on Thursday (UTC). When the installer has no usable release date, the delay starts when WAU first observes that version in the installation context. When the latest version is too new, WAU can check up to 10 earlier versions above the installed version. An arguments-mod pin limits the check to that version. The manifest author supplies the release date. A backdated manifest can satisfy the delay immediately. Enter 0, disable this policy, or leave it unconfigured for immediate eligibility.</string>
+      <string id="ImmediateUpdateExceptions_Name">Immediate update exceptions</string>
+      <string id="ImmediateUpdateExceptions_Explain">Enter one exact source|package ID|version per row, for example winget|Example.App|1.2.3. Match the capitalization used by WAU. Each entry waives the minimum age for that version. App filters, the update schedule and deadline policies still apply.</string>
       <string id="WAU">Winget-AutoUpdate</string>
       <string id="WAUEX">Experimental</string>
       <string id="SUPPORTED_WAU_1_16_0">Winget-AutoUpdate version 1.16.0 or later</string>
@@ -185,6 +189,12 @@ Notes:
 - On shared or multi-user machines the snooze state is machine-wide: one user's dismissal postpones the prompt for all users on that machine.</string>
     </stringTable>
     <presentationTable>
+      <presentation id="MinimumUpdateAgeDays">
+        <decimalTextBox refId="MinimumUpdateAgeDays" defaultValue="0" spin="true" spinStep="1">Days after release (0 to 365)</decimalTextBox>
+      </presentation>
+      <presentation id="ImmediateUpdateExceptions">
+        <listBox refId="ImmediateUpdateExceptions">Source|Package ID|Version</listBox>
+      </presentation>
       <presentation id="BlackList">
         <listBox refId="BlackList">BlackList:</listBox>
       </presentation>

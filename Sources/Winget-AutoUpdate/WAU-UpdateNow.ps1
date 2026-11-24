@@ -98,6 +98,9 @@ $machineApps = @($pendingData.Apps | Where-Object { $_.Scope -ne 'user' })
 $userApps    = @($pendingData.Apps | Where-Object { $_.Scope -eq 'user' })
 
 if ($machineApps.Count -gt 0) {
+    if ($WAUConfig.WAU_MinimumUpdateAgeDays) {
+        $machineApps = @(Select-WAUCurrentQueuedApp $machineApps $Script:WingetSourceCustom)
+    }
     Write-ToLog "$($machineApps.Count) machine-scoped apps to update"
     foreach ($app in $machineApps) {
         Write-ToLog "-> $($app.Name) : $($app.Version) -> $($app.AvailableVersion)"

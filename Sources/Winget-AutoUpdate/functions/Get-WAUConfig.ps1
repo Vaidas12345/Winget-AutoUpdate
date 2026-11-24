@@ -22,5 +22,10 @@ Function Get-WAUConfig {
         $GPO.PSObject.Properties | ForEach-Object { $WAUConfig.PSObject.Properties.add($_) }
     }
 
+    if ($WAUConfig.WAU_MinimumUpdateAgeDays) {
+        $key = Get-Item 'HKLM:\SOFTWARE\Policies\Romanitho\Winget-AutoUpdate\ImmediateUpdateExceptions' -ErrorAction SilentlyContinue
+        $exceptions = @(if ($key) { foreach ($name in $key.GetValueNames()) { $key.GetValue($name) } })
+        $WAUConfig | Add-Member -NotePropertyName WAU_ImmediateUpdateExceptions -NotePropertyValue $exceptions -Force
+    }
     return $WAUConfig
 }

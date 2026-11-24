@@ -163,6 +163,9 @@ if (Test-Network) {
                 # Update-App already calls Confirm-Installation and increments
                 # $Script:InstallOK on success -- no need to re-confirm here.
                 $updatedIds = [System.Collections.Generic.List[string]]::new()
+                if ($WAUConfig.WAU_MinimumUpdateAgeDays) {
+                    $userApps = @(Select-WAUCurrentQueuedApp $userApps $Script:WingetSourceCustom)
+                }
                 foreach ($app in $userApps) {
                     Write-ToLog "→ $($app.Name) : $($app.Version) → $($app.AvailableVersion)"
                     $before = $Script:InstallOK
@@ -400,7 +403,16 @@ if (Test-Network) {
 
         #Get outdated Winget packages
         Write-ToLog "Checking application updates on Winget Repository named '$($Script:WingetSourceCustom)' .." "DarkYellow"
-        $outdated = Get-WingetOutdatedApps -src $Script:WingetSourceCustom
+        $outdated = Get-WingetOutdatedApps -src $Script:WingetSourceCustom -AllowEmptyInventory:([bool]$WAUConfig.WAU_MinimumUpdateAgeDays)
+        if ($null -eq $outdated) { $outdated = @() }
+
+        # Drop minimum-update-age records of apps that are no longer outdated (or all, when disabled)
+        try {
+            Clear-WAUReleaseAgeState $outdated $Script:WingetSourceCustom
+        }
+        catch {
+            Write-ToLog "Could not clean up release age records: $($_.Exception.Message)" "Yellow"
+        }
 
         #If something unusual happened or no update found
         if ($outdated -like "No update found.*") {
@@ -445,6 +457,9 @@ if (Test-Network) {
                     })
                 }
 
+                if ($WAUConfig.WAU_MinimumUpdateAgeDays) {
+                    $userEligible = @(Select-WAUAgeEligibleApp $userEligible $Script:WingetSourceCustom -IncludeDeferred)
+                }
                 $userOutdatedDir = [System.IO.Path]::Combine($env:ProgramData, 'Winget-AutoUpdate')
                 if (-not (Test-Path $userOutdatedDir)) { New-Item -ItemType Directory -Path $userOutdatedDir -Force | Out-Null }
                 $userOutdatedPath = [System.IO.Path]::Combine($userOutdatedDir, 'user-context-outdated.csv')
@@ -495,6 +510,9 @@ if (Test-Network) {
                     }
                 }
 
+                if ($WAUConfig.WAU_MinimumUpdateAgeDays) {
+                    $deadlineApps = @(Select-WAUAgeEligibleApp $deadlineApps $Script:WingetSourceCustom -IncludeDeferred)
+                }
                 # Merge user-context outdated apps if UserContext is enabled.
                 # The CSV file is written by the user-context run on the previous cycle.
                 # CSV is used instead of JSON to avoid PS 5.1 ConvertFrom-Json
@@ -526,14 +544,8 @@ if (Test-Network) {
                     }
                 }
 
-                # Step 1: Sync deadline registry.
-                # First call with -OutdatedApps purges entries for apps no longer outdated
-                # (e.g. user self-updated outside WAU). Second call refreshes our working list.
-                $null = Get-UpdateDeadlines -OutdatedApps $deadlineApps
-                foreach ($app in $deadlineApps) {
-                    Set-UpdateDeadline -App $app -DeadlineDays $DeadlineDays
-                }
-                $deadlines = Get-UpdateDeadlines
+                # Retain deadlines for deferred apps and offer only eligible versions.
+                $deadlines = @(Sync-WAUUpdateDeadline $deadlineApps $DeadlineDays)
 
                 # Step 2: Split into overdue (past deadline) and pending (deadline not yet reached).
                 $today = (Get-Date).Date

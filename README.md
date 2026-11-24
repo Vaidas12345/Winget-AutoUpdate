@@ -60,6 +60,8 @@ You can easily translate toast notifications by creating your locale xml config 
 ### When does the script run?
 WAU runs by default, at logon. You can configure the frequency with options (Daily, BiDaily, Weekly, BiWeekly, Monthly or Never).
 
+To wait a fixed number of days after each application release, configure [Minimum application update age (days)](Sources/Policies/README.md#minimum-application-update-age-days) in the WAU administrative template.
+
 ### Log location
 You can find logs in install location, in logs folder for privileged executions. For user runs (Winget-Install.ps1) a log file will be created at %AppData%\Winget-AutoUpdate\Logs .<br>
 If **Intune Management Extension** is installed, a **SymLink** (WAU-updates.log) is created under **C:\ProgramData\Microsoft\IntuneManagementExtension\Logs**<br>

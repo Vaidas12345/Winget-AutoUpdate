@@ -23,6 +23,7 @@ Function Update-App ($app, $src = "winget") {
     # Helper function to build winget command parameters
     function Get-WingetParams ($Command, $ModsOverride, $ModsCustom, $ModsArguments) {
         $params = @($Command, "--id", $app.Id, "-e", "--accept-package-agreements", "--accept-source-agreements", "-s", $src)
+        if ($ageTarget -and -not $ageTarget.HasVersionArgument) { $params += '--version', $ageTarget.Version }
         if ($Command -eq "install") { $params += "--force" }
 
         if ($ModsOverride) {
@@ -42,8 +43,18 @@ Function Update-App ($app, $src = "winget") {
     # Load mods
     $ModsPreInstall, $ModsOverride, $ModsCustom, $ModsArguments, $ModsUpgrade, $ModsInstall, $ModsInstalled, $ModsNotInstalled = Test-Mods $app.Id
 
+    # With a minimum update age, install only the version Get-WAUEligibleUpdate selects.
+    # It also honors a --version pin from the arguments mod.
+    $ageTarget = $null
+    if ($WAUConfig.WAU_MinimumUpdateAgeDays) {
+        $arguments = if (-not ($ModsOverride -or $ModsCustom)) { $ModsArguments }
+        $ageTarget = Get-WAUEligibleUpdate $app $src $arguments
+        if (-not $ageTarget) { return }
+        $app.AvailableVersion = $ageTarget.Version
+        if ($app.Version -eq $ageTarget.Version) { return }
+    }
     # If arguments mod specifies --version, and no override/custom is present, pin AvailableVersion to that value
-    if ($ModsArguments -and -not $ModsOverride -and -not $ModsCustom) {
+    elseif ($ModsArguments -and -not $ModsOverride -and -not $ModsCustom) {
         # Parse arguments respecting quotes and spaces, then look for --version
         $modsArgArray = ConvertTo-WingetArgumentArray $ModsArguments
         $versionIndex = [array]::IndexOf($modsArgArray, '--version')
@@ -94,17 +105,28 @@ Function Update-App ($app, $src = "winget") {
     # Fallback to install if upgrade failed
     if (-not $ConfirmInstall) {
         $maxRetry = if (Test-PendingReboot) { Write-ToLog "-> Pending reboot detected, limiting retries" "Yellow"; 1 } else { 2 }
+        $retryCommand = if ($ageTarget) { 'upgrade' } else { 'install' }
+        $retryMod = if ($ageTarget) { $ModsUpgrade } else { $ModsInstall }
 
         for ($retry = 1; $retry -le $maxRetry -and -not $ConfirmInstall; $retry++) {
-            Write-ToLog "-> Upgrade failed, trying install ($retry/$maxRetry)..." "DarkYellow"
+            # An app can change again after discovery. The upgrade command also checks
+            # applicability inside WinGet before it installs the selected version.
+            if ($ageTarget) {
+                $current = @(Get-WingetOutdatedApps -src $src | Where-Object { $_.Id -eq $app.Id })
+                if ($current.Count -ne 1 -or $current[0].Version -cne $app.Version) {
+                    Write-ToLog "-> Skipping retry: could not confirm $($app.Id) is still installed at $($app.Version)" "Yellow"
+                    break
+                }
+            }
+            Write-ToLog "-> Upgrade failed, trying $retryCommand ($retry/$maxRetry)..." "DarkYellow"
 
-            $cmd = Get-WingetParams "install" $ModsOverride $ModsCustom $ModsArguments
+            $cmd = Get-WingetParams $retryCommand $ModsOverride $ModsCustom $ModsArguments
             Write-ToLog "-> $($cmd.Log)"
             & $Winget $cmd.Params | Where-Object { $_ -notlike "   *" } | Tee-Object -file $LogFile -Append
 
-            if ($ModsInstall) {
-                Write-ToLog "Running install mod..." "DarkYellow"
-                & $ModsInstall
+            if ($retryMod) {
+                Write-ToLog "Running $retryCommand mod..." "DarkYellow"
+                & $retryMod
             }
 
             $ConfirmInstall = Confirm-Installation $app.Id $app.AvailableVersion $src

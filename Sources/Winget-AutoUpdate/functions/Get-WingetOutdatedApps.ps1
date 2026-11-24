@@ -10,6 +10,10 @@
 .PARAMETER src
     The WinGet source repository name to query (e.g., "winget").
 
+.PARAMETER AllowEmptyInventory
+    Return no apps when WinGet explicitly reports an empty inventory. Return the
+    diagnostic string on errors so release-age state survives an inconclusive scan.
+
 .OUTPUTS
     Array of Software objects with Name, Id, Version, and AvailableVersion.
     Returns descriptive string if no updates are found.
@@ -26,7 +30,8 @@ function Get-WingetOutdatedApps {
     Param(
         [Parameter(Position = 0, Mandatory = $True, HelpMessage = "You MUST supply value for winget repo, we need it")]
         [ValidateNotNullorEmpty()]
-        [string]$src
+        [string]$src,
+        [switch]$AllowEmptyInventory
     )
 
     # Define class for structured output
@@ -46,8 +51,15 @@ function Get-WingetOutdatedApps {
         $upgradeResult = $null
     }
 
-    # Check if output contains valid data (header separator line)
-    if (!($upgradeResult -match "-----")) {
+    # 0x8A150014 is WinGet's "no applications found" result.
+    $scanFailed = $AllowEmptyInventory -and $LASTEXITCODE -notin 0, -1978335212
+    if ($scanFailed -or !($upgradeResult -match "-----")) {
+        if ($AllowEmptyInventory -and -not $scanFailed -and $upgradeResult) {
+            $labels = Get-WAUInstallerLabelMap
+            if ($upgradeResult.Trim() -cin $labels.NoPackagesNeedUpdate, $labels.UpdateNoPackagesFound, $labels.NoInstalledPackageFound) {
+                return
+            }
+        }
         return "No update found. 'Winget upgrade' output:`n$upgradeResult"
     }
     else {
