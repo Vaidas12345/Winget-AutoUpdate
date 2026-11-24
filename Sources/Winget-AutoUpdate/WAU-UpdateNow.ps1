@@ -107,7 +107,7 @@ if ($machineApps.Count -gt 0) {
 
         Update-App $app -src $Script:WingetSourceCustom
 
-        if (Confirm-Installation $app.Id $app.AvailableVersion $Script:WingetSourceCustom) {
+        if (Confirm-Installation $app.Id $app.AvailableVersion $Script:WingetSourceCustom -MatchRelease:([bool]$WAUConfig.WAU_MinimumUpdateAgeDays)) {
             $AppRegPath = Join-Path $DeadlineRegBase $app.Id
             if (Test-Path $AppRegPath) {
                 Remove-Item -Path $AppRegPath -Recurse -Force -ErrorAction SilentlyContinue

@@ -15,22 +15,25 @@
 
 .PARAMETER IncludeDeferred
     Return still-outdated apps with an empty target so deadline tracking can retain
-    their existing deadline without offering an installation.
+    their existing deadline without offering an installation. An app already at its
+    mod-pinned version is not deferred and is never returned.
 
 .OUTPUTS
-    The eligible app objects.
+    Apps with an eligible target, plus waiting apps when IncludeDeferred is set.
 #>
 function Select-WAUAgeEligibleApp ($Apps, $Source, [switch]$IncludeDeferred) {
     foreach ($app in $Apps) {
         $mods = @(Test-Mods $app.Id)
         $arguments = if (-not ($mods[1] -or $mods[2])) { $mods[3] }
         $target = Get-WAUEligibleUpdate $app $Source $arguments
-        if ($target -and $app.Version -ne $target.Version) {
-            $app.AvailableVersion = $target.Version
-            $app
+        if (-not $target) {
+            if ($IncludeDeferred) {
+                $app.AvailableVersion = ''
+                $app
+            }
         }
-        elseif ($IncludeDeferred) {
-            $app.AvailableVersion = ''
+        elseif ($app.Version -ne $target.Version) {
+            $app.AvailableVersion = $target.Version
             $app
         }
     }

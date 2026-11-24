@@ -49,9 +49,8 @@ Function Update-App ($app, $src = "winget") {
     if ($WAUConfig.WAU_MinimumUpdateAgeDays) {
         $arguments = if (-not ($ModsOverride -or $ModsCustom)) { $ModsArguments }
         $ageTarget = Get-WAUEligibleUpdate $app $src $arguments
-        if (-not $ageTarget) { return }
+        if (-not $ageTarget -or $app.Version -eq $ageTarget.Version) { return }
         $app.AvailableVersion = $ageTarget.Version
-        if ($app.Version -eq $ageTarget.Version) { return }
     }
     # If arguments mod specifies --version, and no override/custom is present, pin AvailableVersion to that value
     elseif ($ModsArguments -and -not $ModsOverride -and -not $ModsCustom) {
@@ -100,7 +99,7 @@ Function Update-App ($app, $src = "winget") {
         & $ModsUpgrade
     }
 
-    $ConfirmInstall = Confirm-Installation $app.Id $app.AvailableVersion $src
+    $ConfirmInstall = Confirm-Installation $app.Id $app.AvailableVersion $src -MatchRelease:([bool]$ageTarget)
 
     # Fallback to install if upgrade failed
     if (-not $ConfirmInstall) {
@@ -129,7 +128,7 @@ Function Update-App ($app, $src = "winget") {
                 & $retryMod
             }
 
-            $ConfirmInstall = Confirm-Installation $app.Id $app.AvailableVersion $src
+            $ConfirmInstall = Confirm-Installation $app.Id $app.AvailableVersion $src -MatchRelease:([bool]$ageTarget)
         }
     }
 

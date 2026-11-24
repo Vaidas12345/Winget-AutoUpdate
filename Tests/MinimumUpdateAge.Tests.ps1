@@ -6,7 +6,7 @@ BeforeAll {
         'Clear-WAUReleaseAgeState', 'Update-App', 'ConvertTo-WingetArgumentArray',
         'Test-Mods', 'Get-AppInfo', 'Start-NotifTask', 'Confirm-Installation', 'Test-PendingReboot', 'Write-ToLog',
         'Get-WingetOutdatedApps', 'Get-ExcludedApps', 'Get-IncludedApps', 'Get-WAUConfig',
-        'Get-UpdateDeadlines', 'Set-UpdateDeadline', 'Sync-WAUUpdateDeadline') {
+        'Get-UpdateDeadlines', 'Set-UpdateDeadline', 'Sync-WAUUpdateDeadline', 'Test-WAUInstalledRelease') {
         . (Join-Path $sourceDir "$file.ps1")
     }
 }
@@ -248,8 +248,69 @@ Describe 'Minimum application update age' {
     It 'preserves existing arguments-mod behavior for an installed version with a build suffix' {
         $app.Version = '1.5.0.0'
         Mock Get-WAUReleaseDate { throw 'unexpected lookup' }
-        Get-WAUEligibleUpdate $app winget '--version 1.5' $monday | Should -BeNullOrEmpty
+        $target = Get-WAUEligibleUpdate $app winget '--version 1.5' $monday
+        $target.Version | Should -Be '1.5.0.0'
         Should -Invoke Get-WAUReleaseDate -Times 0 -Exactly
+    }
+
+    It 'drops an app already at its mod-pinned version from deadline tracking instead of holding it' {
+        $root = (Get-Item 'TestRegistry:\').Name
+        New-PSDrive -Name HKLM -PSProvider Registry -Root $root -Scope Local -ErrorAction Stop | Out-Null
+        (Get-Item 'HKLM:\').Name | Should -BeExactly $root
+        (Sync-WAUUpdateDeadline @($app) 7).AppId | Should -Be $app.Id
+        $app.Version = '1.5.0.0'
+        Mock Test-Mods { $null, $null, $null, '--version 1.5', $null, $null, $null, $null }
+        Mock Get-WAUReleaseDate { throw 'unexpected lookup' }
+        $tracked = @(Select-WAUAgeEligibleApp @($app) winget -IncludeDeferred)
+        $tracked.Count | Should -Be 0
+        Sync-WAUUpdateDeadline $tracked 7 | Should -BeNullOrEmpty
+        Get-UpdateDeadlines | Should -BeNullOrEmpty
+        $app.AvailableVersion | Should -Be '2'
+    }
+
+    It 'keeps a pinned release waiting when the installed version is <installed>' -ForEach @(
+        @{ installed = '1.5-rc1' }
+        @{ installed = '1.50' }
+    ) {
+        $app.Version = $installed
+        Mock Test-Mods { $null, $null, $null, '--version 1.5', $null, $null, $null, $null }
+        Mock Get-WAUReleaseDate { [datetime]::UtcNow }
+        $held = @(Select-WAUAgeEligibleApp @($app) winget -IncludeDeferred)
+        $held.Count | Should -Be 1
+        $held[0].AvailableVersion | Should -BeNullOrEmpty
+    }
+
+    It 'confirms an age-checked release using its installed version and numeric build suffix' {
+        $Winget = 'Invoke-TestExport'
+        function Invoke-TestExport {
+            $file = $args[[array]::IndexOf($args, '-o') + 1]
+            @{ Sources = @(@{ Packages = @(@{ PackageIdentifier = $app.Id; Version = $app.Version }) }) } |
+                ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $file
+        }
+        $originalTemp = $env:TEMP
+        try {
+            $env:TEMP = $TestDrive
+            $app.Version = '1.5-rc1'
+            Confirm-Installation $app.Id '1.5' winget -MatchRelease | Should -BeFalse
+            Confirm-Installation $app.Id -src winget | Should -BeTrue
+            $app.Version = '1.50'
+            Confirm-Installation $app.Id '1.5' winget -MatchRelease | Should -BeFalse
+            $app.Version = '1.5.0.0'
+            Confirm-Installation $app.Id '1.5' winget -MatchRelease | Should -BeTrue
+        }
+        finally { $env:TEMP = $originalTemp }
+    }
+
+    It 'skips an app already at its mod-pinned version without installing or changing it' {
+        $app.Version = '1.5.0.0'
+        $Winget = 'Invoke-UnexpectedInstaller'
+        function Invoke-UnexpectedInstaller { throw 'unexpected installer call' }
+        Mock Test-Mods { $null, $null, $null, '--version 1.5', $null, $null, $null, $null }
+        Mock Get-AppInfo {}
+        Mock Start-NotifTask {}
+        Update-App $app winget
+        $app.AvailableVersion | Should -Be '2'
+        Should -Invoke Start-NotifTask -Times 0 -Exactly
     }
 
     Context 'installation' {

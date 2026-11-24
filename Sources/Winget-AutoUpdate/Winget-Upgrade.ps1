@@ -575,7 +575,7 @@ if (Test-Network) {
                         if ($app -and $app.Version -ne "Unknown") {
                             Write-ToLog "Forced update (deadline reached): $($app.Name)"
                             Update-App $app -src $Script:WingetSourceCustom
-                            if (Confirm-Installation $app.Id $app.AvailableVersion $Script:WingetSourceCustom) {
+                            if (Confirm-Installation $app.Id $app.AvailableVersion $Script:WingetSourceCustom -MatchRelease:([bool]$WAUConfig.WAU_MinimumUpdateAgeDays)) {
                                 $DeadlineAppRegPath = "HKLM:\SOFTWARE\Romanitho\Winget-AutoUpdate\UpdateDeadlines\$($app.Id)"
                                 if (Test-Path $DeadlineAppRegPath) {
                                     Remove-Item -Path $DeadlineAppRegPath -Recurse -Force -ErrorAction SilentlyContinue

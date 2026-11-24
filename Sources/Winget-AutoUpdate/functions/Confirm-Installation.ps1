@@ -12,10 +12,13 @@
     The WinGet source to query (e.g. "winget", "msstore"). Defaults to
     "winget".
 
+.PARAMETER MatchRelease
+    Use the minimum-age policy's release comparison when confirming a selected target.
+
 .OUTPUTS
     Boolean: True if installed at version.
 #>
-Function Confirm-Installation ($AppName, $AppVer, $src = "winget") {
+Function Confirm-Installation ($AppName, $AppVer, $src = "winget", [switch]$MatchRelease) {
     if ([string]::IsNullOrWhiteSpace($src)) {
         $src = "winget"
     }
@@ -27,7 +30,9 @@ Function Confirm-Installation ($AppName, $AppVer, $src = "winget") {
     & $Winget export -s $src -o $JsonFile --include-versions | Out-Null
 
     $Packages = (Get-Content $JsonFile -Raw | ConvertFrom-Json).Sources.Packages
-    $match = $Packages | Where-Object { $_.PackageIdentifier -eq $AppName -and $_.Version -like "$AppVer*" }
-
-    return [bool]$match
+    $installed = $Packages | Where-Object { $_.PackageIdentifier -eq $AppName }
+    if ($MatchRelease) {
+        return [bool]($installed | Where-Object { Test-WAUInstalledRelease $_.Version $AppVer })
+    }
+    return [bool]($installed | Where-Object { $_.Version -like "$AppVer*" })
 }

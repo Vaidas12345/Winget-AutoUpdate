@@ -23,6 +23,7 @@
 
 .OUTPUTS
     PSCustomObject with Version and HasVersionArgument, or no output when WAU should defer.
+    When the installation already satisfies a mod pin, Version contains the installed version.
 #>
 function Get-WAUEligibleUpdate ($App, $Source, [string]$ModArguments, [datetime]$Now = [datetime]::UtcNow) {
     # Upper bound on extra "winget show" lookups for the fallback, per app and run.
@@ -57,9 +58,9 @@ function Get-WAUEligibleUpdate ($App, $Source, [string]$ModArguments, [datetime]
         if ([string]::IsNullOrWhiteSpace($version) -or $version -in 'Latest', 'Unknown' -or $version -match '[*?|]') {
             throw "Cannot identify an exact version ($version)"
         }
-        if ($hasVersionArgument -and $App.Version.StartsWith($version, [StringComparison]::OrdinalIgnoreCase)) {
+        if ($hasVersionArgument -and (Test-WAUInstalledRelease $App.Version $version)) {
             Write-ToLog "$($App.Id) $($App.Version) already matches the mod pin $version" 'Gray'
-            return
+            return [PSCustomObject]@{ Version = $App.Version; HasVersionArgument = $true }
         }
         if (Test-WAUReleaseAge $App.Id $Source $version $installerArgs $days $Now) {
             return [PSCustomObject]@{ Version = $version; HasVersionArgument = $hasVersionArgument }

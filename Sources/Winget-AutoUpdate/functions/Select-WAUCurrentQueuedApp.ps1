@@ -39,7 +39,7 @@ function Select-WAUCurrentQueuedApp ($Apps, $Source) {
         }
         $reason = if (-not ($offered | Where-Object { $_.Id -eq $queued.Id })) { 'no update is offered any more' }
         elseif (-not ($live | Where-Object { $_.Id -eq $queued.Id })) { 'excluded by the app list' }
-        elseif (-not $match) { 'no version has passed the minimum update age' }
+        elseif (-not $match) { 'no version has passed the minimum update age, or the pinned version is installed' }
         else { "the eligible version is now $($match.AvailableVersion)" }
         Write-ToLog "Removed $($queued.Id) $($queued.AvailableVersion) from the update queue: $reason" 'Yellow'
     }
